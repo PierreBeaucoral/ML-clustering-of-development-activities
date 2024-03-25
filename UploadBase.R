@@ -27,10 +27,10 @@ library(flextable)
 library(skimr)
 
 
-##### Déclarer le chemin des bases #####
+##### Declare path for datasets #####
 
 # Define the desired working directory path
-wd <- "/Users/pierrebeaucoral/Documents/Pro/Thèse CERDI/Recherche/Travaux CRS"
+wd <- "/your/path/"
 
 # Get the current working directory
 current_wd <- getwd()
@@ -45,18 +45,18 @@ if (current_wd != wd) {
   print(paste("Current working directory is already set to:", getwd()))
 }
 
-####### Specification des années prises en compte #####
+####### Years taken into account #####
 
-##### Années de début/fin ####
+##### Begin and end year ####
 
 Period <- c(1973:2022) 
 Bound  <- paste0(min(Period), "-", max(Period)) 
 
-### Base avec des données annuelles ###
+### Yearly dataset declaration ###
 
 Yearly <- c(2006: 2021)
 
-######### Chargement des bases ########
+######### Datasets charging ########
 
 ##### Bases annuelles #####
 
@@ -68,14 +68,14 @@ for (i in  Yearly) {
 
 gc() 
 
-#### Création d'une liste des bases ####
+#### Creation of a list dataset ####
 
 CRS <- lapply(Yearly, function(x) {
   dataframeName <- paste0("CRS ", x, " Data")
   return(get(dataframeName))
 })
 
-##### Bases pluri-annuelles #####
+##### For pluri-annual datasets #####
 
 
 "CRS 1973-94 data" <- fread("./Data/CRS/CRS 1973-94 data.txt",  encoding =  "Latin-1")
@@ -85,18 +85,18 @@ CRS <- lapply(Yearly, function(x) {
 "CRS 2004-05 data" <- fread("./Data/CRS/CRS 2004-05 data.txt",  encoding =  "Latin-1")
 
 
-####### Création d'une liste avec toutes les données #######
+####### Creation of a list with all datasets #######
 
-#### Création de la liste ####
+#### List creation ####
 BDD <- list()
-gc() #libérer de l'espace#
+gc() 
 
-#### Insertion des bases ####
+#### Insertion of datasets ####
 
 BDD <-  c(list(`CRS 1973-94 data`, `CRS 1995-99 data`, `CRS 2000-01 data`, `CRS 2002-03 data`, `CRS 2004-05 data`),CRS)
-gc() #libérer de l'espace#
+gc() 
 
-#### Changer les éléments de la liste en DataFrame #### 
+#### Change list element into dataframes #### 
 
 BDD <- lapply(1:length(BDD), function (x){
   as.data.frame(BDD[x])
