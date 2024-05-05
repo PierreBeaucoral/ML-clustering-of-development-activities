@@ -19,11 +19,16 @@ from hdbscan import HDBSCAN
 from umap import UMAP
 from sklearn.feature_extraction.text import CountVectorizer
 import pretty_errors
+from nltk.corpus import stopwords
+from bertopic.vectorizers import ClassTfidfTransformer
 
 pretty_errors.configure(
     display_timestamp=1,
     timestamp_function=lambda: datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 )
+
+
+
 
 # Function to import CSV
 def load_csv(file_path, dtype=str, delimiter=","):
@@ -54,48 +59,53 @@ if __name__ == "__main__":
     # Print information about the loaded DataFrame
     print("Loaded CSV file. DataFrame shape:", df.shape)
 
-    # Assign a unique category to each TEXT
-    df['label'] = 'project' + df['raw_text'].astype(str).astype('category').cat.codes.astype(str)
-    df.to_csv("Data/labeled_projects.csv", index=False, header=True, sep=',')
-
-    # Drop duplicates in project descriptions
-    df = df.drop_duplicates(subset='label', keep='first')
-    print("DataFrame shape after dropping duplicates:", df.shape)
+    # Drop duplicates based on project descriptions
+    df_unique = df.drop_duplicates(subset='raw_text', keep='first')
+   
+    # Reset index to ensure unique identifier for each project
+    df_unique.reset_index(drop=True, inplace=True)
+    
+    print("DataFrame shape after dropping duplicates:", df_unique.shape)
     
     # Create a directory to save visualizations if it doesn't exist
     output_dir = os.path.join(os.getcwd(), 'visualizationsretreated')
     os.makedirs(output_dir, exist_ok=True)
     
-    # Assuming 'raw_text' and 'year' are the columns you want to use for topic modeling and time visualization
-    docs = df['raw_text'].tolist()
-    timestamps = df['Year'].tolist()  # Replace 'Year' with your actual timestamp column
-
-    # Selection of your setup for the different steps of BERTopic
-    ## select the model you want to use for embeddings
-    sentence_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+    # Create a directory to save dataframe if it doesn't exist
+    data_output_dir = os.path.join(os.getcwd(), 'dataframeretreated')
+    os.makedirs(data_output_dir, exist_ok=True)
     
-    ## Realize the embeddings
+    # Assuming 'raw_text' and 'year' are the columns you want to use for topic modeling and time visualization
+    docs = df_unique['raw_text'].tolist()
+    timestamps = df_unique['Year'].tolist()  # Replace 'Year' with your actual timestamp column
+
+    # Realize embeddings
+    
+    ## Set up embbeding model
+    sentence_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+    ## realize embbedings
     embeddings = sentence_model.encode(docs, show_progress_bar=True)
 
-    ## Setting your hbdscan model 
+    # Set up HSBCAN params
     hdbscan_model = HDBSCAN(min_cluster_size=500, metric='euclidean', cluster_selection_method='leaf', prediction_data=True)
-        
-    ## Setting your hbdscan model 
+
+    # Set up UMAP params
     umap_model = UMAP(n_neighbors=100, n_components=12,min_dist=0, metric='cosine')
 
-    ## Setting parameter for c-TF-IDF scores
+    # Set up representation model params
     representation_model = MaximalMarginalRelevance(diversity=0.3)
-    vectorizer_model = CountVectorizer(ngram_range=(1, 2), stop_words="english", min_df=10)
+    final_stopwords_list = stopwords.words('english') + stopwords.words('french')+ stopwords.words('dutch')+ stopwords.words('spanish')
+    vectorizer_model = CountVectorizer(ngram_range=(1, 2), stop_words=final_stopwords_list, min_df=10)
+    ctfidf_model = ClassTfidfTransformer(reduce_frequent_words=True)
 
-    # Topic modeling using BERTopic with your custom model
-    topic_model = BERTopic( hdbscan_model=hdbscan_model, umap_model=umap_model, representation_model=representation_model,language="multilingual")
+
+
+    # Topic modeling using BERTopic with your custom embedding model
+    topic_model = BERTopic( hdbscan_model=hdbscan_model, umap_model=umap_model, representation_model=representation_model,language="multilingual", vectorizer_model=vectorizer_model)
     topics, _ = topic_model.fit_transform(docs,embeddings)
     hierarchical_topics = topic_model.hierarchical_topics(docs)
     
-    #Save your model with embeddings (quite demanding)
-    topic_model.save("\your\repo")
-
-    # Evaluate using different metricsP
+    # Evaluate using different metrics
 
     ## Generate `X` and `labels` only for non-outlier topics (as they are technically not clusters)
     umap_embeddings = topic_model.umap_model.transform(embeddings)
@@ -116,25 +126,27 @@ if __name__ == "__main__":
     print("davies_bouldin Score:", davies_bouldin)
     calinski_harabasz = calinski_harabasz_score(X, labels)
     print("calinski_harabasz Score:", calinski_harabasz)
+
+    # Reducing outliers process
     
-    # Reduce outliers 
-  
     ## Use the "c-TF-IDF" strategy with a threshold
     new_topics = topic_model.reduce_outliers(docs, topics, strategy="c-tf-idf", threshold=0.6)
+
+    ## Evaluation of the outlier reduction process
     
-    ## Generate `X` and `labels` only for non-outlier topics (as they are technically not clusters)
+    ### Generate `X` and `labels` only for non-outlier topics (as they are technically not clusters)
     umap_embeddings = topic_model.umap_model.transform(embeddings)
     indices = [index for index, topic in enumerate(new_topics) if topic != -1]
     X = umap_embeddings[np.array(indices)]
     labels = [topic for index, topic in enumerate(new_topics) if topic != -1]
     
-    ## Outliers info
+    ### Outliers info
     
     outliers_info = topic_model.get_topic_info(-1)
     outliers_count1 = np.sum(np.array(new_topics) == -1)
     print("Number of outliers:", outliers_count1)
 
-    ## Calculate different clustering quality scores
+    ### Calculate different clustering quality scores
     silhouette1 = silhouette_score(X, labels)
     print("Silhouette Score after first reducing:", silhouette1)
     davies_bouldin1 = davies_bouldin_score(X, labels)
@@ -143,50 +155,35 @@ if __name__ == "__main__":
     print("calinski_harabasz Score after first reducing:", calinski_harabasz1)
     
     ## Reduce remaining outliers with the "embeddings" strategy (more computation time than previous)
-    new_topics = topic_model.reduce_outliers(docs, topics, strategy="embeddings", embeddings=embeddings, threshold=0.75)
-    
-    ## Generate `X` and `labels` only for non-outlier topics (as they are technically not clusters)
+    new_topics = topic_model.reduce_outliers(docs, topics, strategy="embeddings", embeddings=embeddings, threshold=0.725)
+
+    ## Evaluation of the second outlier reduction process
+
+    ### Generate `X` and `labels` only for non-outlier topics (as they are technically not clusters)
     umap_embeddings = topic_model.umap_model.transform(embeddings)
     indices = [index for index, topic in enumerate(new_topics) if topic != -1]
     X = umap_embeddings[np.array(indices)]
     labels = [topic for index, topic in enumerate(new_topics) if topic != -1]
     
-    ## Outliers info
+    ### Outliers info
     
     outliers_info = topic_model.get_topic_info(-1)
     outliers_count2 = np.sum(np.array(new_topics) == -1)
     print("Number of outliers:", outliers_count2)
 
-    ## Calculate different clustering quality scores
+    ### Calculate different clustering quality scores
     silhouette2 = silhouette_score(X, labels)
     print("Silhouette Score after second reducing:", silhouette2)
     davies_bouldin2 = davies_bouldin_score(X, labels)
     print("davies_bouldin Score after second reducing:", davies_bouldin2)
     calinski_harabasz2 = calinski_harabasz_score(X, labels)
     print("calinski_harabasz Score after second reducing:", calinski_harabasz2)
-    
 
-    ## Update topics with the reduced outliers
+    # Update topics with the reduced outliers
     topic_model.update_topics(docs, topics=new_topics)
     
-    # re-use the hdbscan to automaticaly reduce topics that will seem similar
-    topic_model.reduce_topics(docs, nr_topics="auto")
     
-    ## Outliers info
-    
-    outliers_info = topic_model.get_topic_info(-1)
-    outliers_count3 = np.sum(np.array(new_topics) == -1)
-    print("Number of outliers:", outliers_count3)
-
-    ## Calculate different clustering quality scores
-    silhouette3 = silhouette_score(X, labels)
-    print("Silhouette Score after second reducing:", silhouette3)
-    davies_bouldin3 = davies_bouldin_score(X, labels)
-    print("davies_bouldin Score after second reducing:", davies_bouldin3)
-    calinski_harabasz3 = calinski_harabasz_score(X, labels)
-    print("calinski_harabasz Score after second reducing:", calinski_harabasz3)
-    
-    # Define the differents scores calculated in our process in a same object
+    # Define the scores
     scores = {
     "Original": {
         "Silhouette Score": silhouette,
@@ -205,35 +202,35 @@ if __name__ == "__main__":
         "davies_bouldin Score": davies_bouldin2,
         "calinski_harabasz Score": calinski_harabasz2,
         "Nb. of outliers": outliers_count2
-    },
-    "After Topic Reduction": {
-        "Silhouette Score": silhouette3,
-        "davies_bouldin Score": davies_bouldin3,
-        "calinski_harabasz Score": calinski_harabasz3,
-        "Nb. of outliers": outliers_count3
     }
 }
-    ## Convert the scores dictionary to a DataFrame
+    # Convert the scores dictionary to a DataFrame
     scores_df = pd.DataFrame(scores)
     
-    ## Save results
-    scores_df.to_csv("scores.csv", index=False, header=True, sep=',')
+    #Save results
+    scores_df.to_csv(os.path.join(data_output_dir, "scores.csv"), index=False, header=True, sep=',')
     
-    # Add the updated topics to your DataFrame
-    df['Topic'] = topics
+    #Get document info
+    doc_info = topic_model.get_document_info(docs)
+    
+    # Convert document information to DataFrame
+    doc_info_df = pd.DataFrame(doc_info, columns=['document', 'topic'])
+    
+    # Merge doc_info_df with df based on 'raw_text' (assuming 'document' corresponds to 'raw_text')
+    merged_df = pd.merge(df_unique, doc_info_df, left_on='raw_text', right_on='document', how='left')
+    
+    # Drop the extra 'document' column as it's redundant
+    merged_df.drop(columns=['document'], inplace=True)
 
-    # saving the differents output 
-    ## Save the dataframe of unique projects with their associated topic in csv
-    df.to_csv("projects_clusters.csv", index=False, header=True, sep=',')
+    # Save the dataframe as a csv
+    merged_df.to_csv(os.path.join(data_output_dir,"projects_clusters.csv"), index=False, header=True, sep=',')
     
-    ## Save csv dataframe with topic info
+    #Save csv dataframe with topic info
     Topic_info = topic_model.get_topic_info()
-    Topic_info.to_csv("topic_info.csv", index=False, header=True, sep=',')
+    Topic_info.to_csv(os.path.join(data_output_dir,"topic_info.csv"), index=False, header=True, sep=',')
 
     
-    # Visualizations of Topics
-
-    ## Distribution of topics
+    # Visualize Topics
     fig_topics = topic_model.visualize_topics()
     fig_topics.write_html(os.path.join(output_dir, "topics_visualization.html"))
     
@@ -250,6 +247,8 @@ if __name__ == "__main__":
     ## Visualize Term Score Decline
     fig_term_rank = topic_model.visualize_term_rank()
     fig_term_rank.write_html(os.path.join(output_dir, "term_rank_visualization.html"))
+    
+    
     
     ## Visualize Topics over Time using the 'Year' variable
     topics_over_time = topic_model.topics_over_time(docs, timestamps)
@@ -270,32 +269,30 @@ if __name__ == "__main__":
     topics, probabilities = topic_model.fit_transform(docs)  # Re-run fit_transform to get topics and probabilities
     fig_distribution = topic_model.visualize_distribution(probabilities)
     fig_distribution.write_html(os.path.join(output_dir, "distribution_visualization.html"))
-
-    ## Assignment of each raw text in clusters 
-    ### Perform dimensionality reduction with UMAP    
+    
+    ## Perform dimensionality reduction with UMAP    
     reduced_embeddings = UMAP(n_neighbors=100, n_components=2, min_dist=0.0, metric='cosine').fit_transform(embeddings)
-    ### Creation of the plotly
+
     fig_assignement = topic_model.visualize_documents(docs, reduced_embeddings=reduced_embeddings, hide_document_hover=True)
     fig_assignement.write_html(os.path.join(output_dir, "fig_assignement.html"))
     
-    ## word scores per topic 
+    ## word scores
     fig_word = topic_model.visualize_barchart(top_n_topics=total_topics)
     fig_word.write_html(os.path.join(output_dir, "fig_word.html"))
-
-    # Merge topic with the original global dataset  
-    ## Load the 'labeled_projects' DataFrame
-    labeled_projects = load_csv(os.path.join('Data/labeled_projects.csv'), dtype={'PurposeCode': float})
     
     ## Merge DataFrames on the 'label' column
-    merged_df = pd.merge(labeled_projects, df[['label', 'Topic']], on='label', how='left')
+    merged_df = pd.merge(df, df_unique[['raw_text', 'Topic']], on='raw_text', how='left')
 
     ## Save the merged DataFrame
-    merged_df.to_csv("merged_projects.csv", index=False, header=True, sep=',')
+    merged_df.to_csv(os.path.join(data_output_dir,"merged_projects.csv"), index=False, header=True, sep=',')
 
     print("Merged DataFrame saved as 'merged_projects.csv'.")
 
-    print("Visualizations completed.")
+    print("Visualizations completed. Saving model")
     
+    topic_model.save(".\my_model")
+
     end_time = datetime.now()
     elapsed_time = (end_time - start_time)/60
     print(f"Script executed in {elapsed_time.total_seconds():.2f} minutes.")
+   
