@@ -87,8 +87,7 @@ if __name__ == "__main__":
 
     # Set up representation model params
     representation_model = MaximalMarginalRelevance(diversity=0.3)
-    final_stopwords_list = stopwords.words('english') + stopwords.words('french')+ stopwords.words('dutch')+ stopwords.words('spanish')
-    vectorizer_model = CountVectorizer(ngram_range=(1, 2), stop_words=final_stopwords_list, min_df=10)
+    vectorizer_model = CountVectorizer(ngram_range=(1, 2), min_df=10)
     ctfidf_model = ClassTfidfTransformer(reduce_frequent_words=True)
 
 
