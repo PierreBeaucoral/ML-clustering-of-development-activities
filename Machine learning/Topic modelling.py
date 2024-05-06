@@ -49,13 +49,6 @@ if __name__ == "__main__":
     # Load CSV file
     df = load_csv(os.path.join('Data/Dataset.csv'), dtype={'raw_text': str, "PurposeCode": float})
 
-    # Load SpaCy NLP model
-    nlp = spacy.load("en_core_web_trf")
-    regions = ['GPE', 'LOC', "ORG", "NORP", "PERS", "EVENT", "DATE", "LANGUAGE", "LAW", "CARDINAL"]
-
-    # Redact entities from 'raw_text' column
-    df['raw_text'] = df['raw_text'].apply(lambda text: replace_entities_with_whitespace(text, regions))
-
     # Print information about the loaded DataFrame
     print("Loaded CSV file. DataFrame shape:", df.shape)
 
