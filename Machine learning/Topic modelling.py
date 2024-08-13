@@ -115,14 +115,16 @@ def main():
     embeddings = sentence_model.encode(docs, show_progress_bar=True)
 
     ## Clustering
-    hdbscan_model = HDBSCAN(min_cluster_size=500, metric='euclidean', cluster_selection_method='leaf', prediction_data=True)
+    hdbscan_model = HDBSCAN(min_cluster_size=500, min_samples=400, metric='euclidean', cluster_selection_method='leaf', prediction_data=True)
     
     ## Dimensionality reduction
     umap_model = UMAP(n_neighbors=100, n_components=12, min_dist=0, metric='cosine')
 
     ## Labeling clusters
     representation_model = MaximalMarginalRelevance(diversity=0.3)
-    vectorizer_model = CountVectorizer(ngram_range=(1, 2), stop_words=final_stopwords_list, min_df=10)
+    final_stopwords_list = stopwords.words('english') + stopwords.words('german') + stopwords.words('french')+ stopwords.words('dutch')+ stopwords.words('spanish')
+    vectorizer_model = CountVectorizer(ngram_range=(1, 3), stop_words=final_stopwords_list, min_df=50, max_features=10000)
+    # Set gpu_layers to the number of layers to offload to GPU. Set to 0 if no GPU acceleration is available on your system.
     tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-beta")
     model = AutoModelForCausalLM.from_pretrained("HuggingFaceH4/zephyr-7b-beta")
     model.eval()
@@ -150,8 +152,8 @@ Based on the information about the topic above, please create a short label of t
     representation_model = {"Zephyr": zephyr}
 
     # Topic modeling using BERTopic with your custom embedding model
-    topic_model = BERTopic(hdbscan_model=hdbscan_model, umap_model=umap_model, representation_model=representation_model, language="multilingual", vectorizer_model=vectorizer_model)
-    topics, _ = topic_model.fit_transform(docs, embeddings)
+    topic_model = BERTopic(hdbscan_model=hdbscan_model, umap_model=umap_model, representation_model=representation_model, language="multilingual", vectorizer_model=vectorizer_model, calculate_probabilities=True, low_memory=True)
+    topics, probs = topic_model.fit_transform(docs, embeddings)
     hierarchical_topics = topic_model.hierarchical_topics(docs)
     
     print("Topic modeling completed.")
@@ -218,25 +220,32 @@ Based on the information about the topic above, please create a short label of t
     
     # Make same label shorter
     
-    zephyr_labels = update_dictionary_value(zephyr_labels, 5, "Renewable Energy & Efficiency Prog.")
-    zephyr_labels = update_dictionary_value(zephyr_labels, 12, "Access Justice Legal Dev")
-    zephyr_labels = update_dictionary_value(zephyr_labels, 13, "Vocational Training")
-    zephyr_labels = update_dictionary_value(zephyr_labels, 16, "Microfinance")
-    zephyr_labels = update_dictionary_value(zephyr_labels, 47, "Water & Sanitation")
-    zephyr_labels = update_dictionary_value(zephyr_labels, 85, "FED support")
-    zephyr_labels = update_dictionary_value(zephyr_labels, 97, "Water Supply Projects")
-    zephyr_labels = update_dictionary_value(zephyr_labels, 114, "Gender Eq- Women Empowerment")
-    zephyr_labels = update_dictionary_value(zephyr_labels, 136, "Agric Dev")
-    zephyr_labels = update_dictionary_value(zephyr_labels, 181, "Polio eradication, vaccination, UNICEF")
-    zephyr_labels = update_dictionary_value(zephyr_labels, 186, "Sudan-South Sudan Peace")
-    zephyr_labels = update_dictionary_value(zephyr_labels, 238, "Educ Taller latin america")
-    zephyr_labels = update_dictionary_value(zephyr_labels, 354, "Cyclones dev project")
-    zephyr_labels = update_dictionary_value(zephyr_labels, 355, "Alliance FrenCH dev aid per")
-    zephyr_labels = update_dictionary_value(zephyr_labels, 369, "Thermal Pwr Plant Proj")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 13, "Vocational training")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 20, "Integrated Rural Dev")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 76, "Refugees aid")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 167, "Salaries for civil society strengthening projects in Africa")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 182, "Eye health services")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 187, "Misean Cara dev project support")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 229, "Women's rights, Indigenous organizations, gender equity (Latin America)")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 290, "Air Pollution Mitigation")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 291, "AIDS Relief for Global Health")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 347, "Fertilizer Plant")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 351, "Programm 185, french cooperation and cultural action services")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 352, "Internship duties")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 357, "Fr-alliance-dev-employees")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 362, "Reception & Plac. Inside US (Migrants/Refugees)")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 365, "International french schools")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 367, "EIDHR CBSS Action Prog")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 371, "Cyclones project")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 373, "Nigerian Anti-corruption projects")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 379, "Cooperation with moldova")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 384, "Spain cultural centers cooperation")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 396, "national endowment for democracy grant")
+    zephyr_labels = update_dictionary_value(zephyr_labels, 402, "integrated water resource management (Jordan, Palestine, Israel)")
 
     # Set the labels to the topic model
     topic_model.set_topic_labels(zephyr_labels)
-
+    
     # Save some results as csv files
     doc_info = topic_model.get_document_info(docs)
     doc_info_df = pd.DataFrame(doc_info, columns=['Document', 'Topic'])
@@ -245,17 +254,17 @@ Based on the information about the topic above, please create a short label of t
     doc_info_df['Document'] = doc_info_df['Document'].astype(str)
     merged_df = pd.merge(df_unique, doc_info_df, left_on='raw_text', right_on='Document', how='left')
     merged_df.drop(columns=['Document'], inplace=True)
-    merged_df.to_csv(os.path.join(data_output_dir, "projects_clusters.csv"), index=False, header=True, sep=',')
-    
     topic_info = topic_model.get_topic_info()
     topic_info.to_csv(os.path.join(data_output_dir, "topic_info.csv"), index=False, header=True, sep=',')
-
+    merged_df = pd.merge(merged_df, topic_info, left_on='Topic', right_on='Topic', how='left')
+    merged_df.to_csv(os.path.join(data_output_dir, "projects_clusters.csv"), index=False, header=True, sep=',')
+    
     # Visualisation of topics 
-    fig_topics = topic_model.visualize_topics(custom_labels=True)
+     fig_topics = topic_model.visualize_topics(custom_labels=True)
     fig_topics.write_html(os.path.join(output_dir, "topics_visualization.html"))
     
     total_topics = len(set(topics))
-    n_clusters = min(250, (total_topics) - 10)
+    n_clusters = min(400, (total_topics) - 10)
     fig_heatmap = topic_model.visualize_heatmap(n_clusters=n_clusters, custom_labels=True)
     fig_heatmap.write_html(os.path.join(output_dir, "heatmap_visualization.html"))
     
@@ -274,16 +283,17 @@ Based on the information about the topic above, please create a short label of t
     fig_hierarchy = topic_model.visualize_hierarchy(hierarchical_topics=hierarchical_topics, custom_labels=True)
     fig_hierarchy.write_html(os.path.join(output_dir, "hierarchy_visualization.html"))
     
-    topics, probabilities = topic_model.fit_transform(docs)
-    fig_distribution = topic_model.visualize_distribution(probabilities,custom_labels=True)
+    fig_distribution = topic_model.visualize_distribution(probabilities=probs)
     fig_distribution.write_html(os.path.join(output_dir, "distribution_visualization.html"))
+    
+    fig_word = topic_model.visualize_barchart(top_n_topics=total_topics, custom_labels=True)
+    fig_word.write_html(os.path.join(output_dir, "fig_word.html"))
     
     reduced_embeddings = UMAP(n_neighbors=100, n_components=2, min_dist=0.0, metric='cosine').fit_transform(embeddings)
     fig_assignement = topic_model.visualize_documents(docs,custom_labels=True, reduced_embeddings=reduced_embeddings, hide_document_hover=True)
     fig_assignement.write_html(os.path.join(output_dir, "fig_assignement.html"))
-    
-    fig_word = topic_model.visualize_barchart(top_n_topics=total_topics, custom_labels=True)
-    fig_word.write_html(os.path.join(output_dir, "fig_word.html"))
+    fig_assignement_datamap = topic_model.visualize_document_datamap(docs,custom_labels=True, reduced_embeddings=reduced_embeddings, hide_document_hover=True)
+    fig_assignement_datamap.write_html(os.path.join(output_dir, "fig_assignement_datamap.html"))
     
     all_merged_df = pd.merge(df, df_unique[['raw_text', 'Topic']], on='raw_text', how='left')
     all_merged_df.to_csv(os.path.join(data_output_dir, "merged_projects.csv"), index=False, header=True, sep=',')
@@ -291,7 +301,7 @@ Based on the information about the topic above, please create a short label of t
     print("Merged DataFrame saved as 'merged_projects.csv'.")
     print("Visualizations completed. Saving model")
     
-    topic_model.save("S:/pibeauco/my_model")
+    topic_model.save("./my_model")
     
     end_time = datetime.now()
     elapsed_time = (end_time - start_time).total_seconds() / 60
